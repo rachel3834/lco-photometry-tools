@@ -17,13 +17,14 @@ def run_diff_phot():
     params = get_params()
     check_sanity(params)
 
-    phot_data = dataset.DataSet()
+    phot_data = dataset.DataSet(params=params)
     phot_data.load_star_list(params)
     phot_data.print_star_list()
     phot_data.load_data(params)
     
-# Read a set of photometry files and build 3D data array of position matched
-# targets.
+    phot_data.plot_lightcurves(phot_data.star_list)
+    phot_data.output_lightcurves(phot_data.star_list)
+    
 # User identifies target by position
 # User identifies comparison stars
 # Compute differential photometry
