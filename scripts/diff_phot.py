@@ -25,9 +25,8 @@ def run_diff_phot():
     phot_data.plot_lightcurves(phot_data.star_list)
     phot_data.output_lightcurves(phot_data.star_list)
     
-# User identifies target by position
-# User identifies comparison stars
-# Compute differential photometry
+    phot_data.diff_photometry()
+
 # Output data products
 
 def get_params():

@@ -15,6 +15,7 @@ import time_functions
 from matplotlib import use as useBackend
 useBackend('Agg')
 from matplotlib import pyplot
+import statistics
 
 class Star():
     def __init__(self,idstr,rastr,decstr):
@@ -33,6 +34,9 @@ class DataSet():
         self.input_frames = None
         self.valid_frames = []
         self.data_cube = np.zeros(1)
+        self.residuals_cube = np.zeros(1)
+        self.ensemble_flux = np.zeros(1)
+        self.ensemble_fluxerr = np.zeros(1)
         self.nstars = 0
         self.nframes= 0
         self.star_list = []
@@ -70,6 +74,7 @@ class DataSet():
         self.nframes = len(self.input_frames)
         
         self.data_cube = np.zeros([self.nstars,self.nframes,7])
+        self.residuals_cube = np.zeros([self.nstars,self.nframes,2])
         self.data_cube.fill(-99.0)
         
         for i in range(0,len(self.input_frames)):
@@ -84,6 +89,45 @@ class DataSet():
                 for k in range(0,stars_data.shape[1]):
                     self.data_cube[:,i,k+1] = stars_data[:,k]
     
+    def diff_photometry(self):
+        """Method to compute differential photometry for the selected stars"""
+        
+        self.calc_residuals()
+        self.calc_ensemble_lightcurve()
+        self.calc_differential_lightcurve()
+    
+    def calc_residuals(self):
+        """Method to calculate the residual lightcurve for all stars in the
+        data cube by subtracting the Median Absolute Deviation from each 
+        lightcurve, weighted by the photometric errors"""
+        
+        for j in range(0,self.nstars):
+            flux = self.data_cube[j,:,4]
+            fluxerr = self.data_cube[j,:,5]
+            mad = statistics.calc_mad(flux,fluxerr)
+            self.residuals_cube[j,:,0] = flux - mad
+            self.residuals_cube[j,:,1] = fluxerr
+    
+    def calc_ensemble_lightcurve(self):
+        """Method to calculate the ensemble lightcurve for differential 
+        photometry"""
+        
+        residuals = self.residuals_cube[1:,:,0]
+        sigmas = self.residuals_cube[1:,:,0]
+        self.ensemble_flux = residuals.sum(axis=1)/float(self.nstars-1)
+        self.ensemble_fluxerr = (sigmas*sigmas).sum()/(residuals*residuals).sum()
+    
+    def calc_differential_lightcurve(self):
+        """Method to calculate the differential lightcurves of all stars 
+        in the data cube"""
+        
+        ensemble_fluxerr_sq = 1.0 / (self.ensemble_fluxerr*self.ensemble_fluxerr)
+        for j in range(0,self.nstars):
+            self.residuals_cube[j,:,0] = self.residuals_cube[j,:,0] / self.ensemble_flux
+            sigmas = self.residuals_cube[j,:,1]
+            weights = (1.0 / (sigmas*sigmas)) + ensemble_fluxerr_sq
+            self.residuals_cube[j,:,1] = np.sqrt(weights)
+            
     def plot_lightcurves(self,selected_stars):
         """Method to plot lightcurve files of a selected range of stars
         from the star list.  Expects a list of Star objects"""
