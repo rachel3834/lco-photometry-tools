@@ -75,7 +75,12 @@ class DataSet():
         
         self.data_cube = np.zeros([self.nstars,self.nframes,7])
         self.residuals_cube = np.zeros([self.nstars,self.nframes,2])
-        self.data_cube.fill(-99.0)
+        self.data_cube.fill(np.NaN)
+        self.residuals_cube.fill(np.NaN)
+        self.ensemble_flux = np.zeros([self.nframes])
+        self.ensemble_flux.fill(np.NaN)
+        self.ensemble_fluxerr = np.zeros([self.nframes])
+        self.ensemble_fluxerr.fill(np.NaN)
         
         for i in range(0,len(self.input_frames)):
             print('Reading data for '+path.basename(self.input_frames[i]))
@@ -93,42 +98,53 @@ class DataSet():
         """Method to compute differential photometry for the selected stars"""
         
         self.calc_residuals()
+        print('Calculated residuals')
+        self.plot_lightcurves(self.star_list,suffix='norm')
+        print('Plotted normalized lightcurves')
         self.calc_ensemble_lightcurve()
+        print('Calculated the ensemble lightcurve')
         self.calc_differential_lightcurve()
+        print('\nCompleted differential photometry')
     
-    def calc_residuals(self):
+    def calc_residuals(self,debug=False):
         """Method to calculate the residual lightcurve for all stars in the
-        data cube by subtracting the Median Absolute Deviation from each 
+        data cube by dividing by the Median Absolute Deviation from each 
         lightcurve, weighted by the photometric errors"""
         
         for j in range(0,self.nstars):
-            flux = self.data_cube[j,:,4]
-            fluxerr = self.data_cube[j,:,5]
-            mad = statistics.calc_mad(flux,fluxerr)
-            self.residuals_cube[j,:,0] = flux - mad
-            self.residuals_cube[j,:,1] = fluxerr
-    
+            flux = self.data_cube[j,:,5]
+            fluxerr = self.data_cube[j,:,6]
+            (wmean,sigma_wmean) = statistics.calc_weighted_mean(flux,fluxerr)
+            idx = ~np.isnan(flux)
+            self.residuals_cube[j,idx,0] = flux[idx] / wmean
+            self.residuals_cube[j,idx,1] = fluxerr[idx] / wmean
+            if debug == True:
+                print('Mean flux of star '+self.star_ids[j]+' = '+str(wmean))
+                
     def calc_ensemble_lightcurve(self):
         """Method to calculate the ensemble lightcurve for differential 
         photometry"""
         
         residuals = self.residuals_cube[1:,:,0]
-        sigmas = self.residuals_cube[1:,:,0]
-        self.ensemble_flux = residuals.sum(axis=1)/float(self.nstars-1)
-        self.ensemble_fluxerr = (sigmas*sigmas).sum()/(residuals*residuals).sum()
-    
+        sigmas = self.residuals_cube[1:,:,1]
+        for i in range(0,self.nframes):
+            (self.ensemble_flux[i],sig) = statistics.calc_weighted_mean(residuals[:,i],sigmas[:,i])
+            self.ensemble_fluxerr[i] = statistics.calc_weighted_sigma(residuals[:,i],sigmas[:,i],self.ensemble_flux[i])
+        
+        
     def calc_differential_lightcurve(self):
         """Method to calculate the differential lightcurves of all stars 
         in the data cube"""
         
-        ensemble_fluxerr_sq = 1.0 / (self.ensemble_fluxerr*self.ensemble_fluxerr)
+        ensemble_sigma_sq = 1.0 / (self.ensemble_fluxerr*self.ensemble_fluxerr)
         for j in range(0,self.nstars):
             self.residuals_cube[j,:,0] = self.residuals_cube[j,:,0] / self.ensemble_flux
             sigmas = self.residuals_cube[j,:,1]
-            weights = (1.0 / (sigmas*sigmas)) + ensemble_fluxerr_sq
-            self.residuals_cube[j,:,1] = np.sqrt(weights)
+            weights = (1.0 / (sigmas*sigmas)) + ensemble_sigma_sq
+            self.residuals_cube[j,:,1] = np.sqrt(1.0/weights)
             
-    def plot_lightcurves(self,selected_stars):
+            
+    def plot_lightcurves(self,selected_stars,suffix=None):
         """Method to plot lightcurve files of a selected range of stars
         from the star list.  Expects a list of Star objects"""
         
@@ -136,34 +152,78 @@ class DataSet():
             j = self.get_star_idx(star)
             fig = pyplot.figure(1)
             ts = self.data_cube[j,:,0]
-            f = self.data_cube[j,:,5]
-            ferr = self.data_cube[j,:,6]
-            idx = np.where(f > -99.0 )
+            f = self.residuals_cube[j,:,0]
+            ferr = self.residuals_cube[j,:,1]
+            idx = ~np.isnan(f)
             pyplot.errorbar(ts[idx],f[idx],yerr=ferr[idx],fmt='k.', mfc='k', mec='k',ms=2, capsize=1)
+            #pyplot.plot(ts[idx],f[idx],'k.',ms=2)
+            #print f[idx],ferr[idx]
+            (wmean,sig) = statistics.calc_weighted_mean(f[idx],ferr[idx])
+            wsig = statistics.calc_weighted_sigma(f[idx],ferr[idx],wmean)
+            pyplot.plot([ts[0],ts[-1]], [wmean,wmean],'r-')
+            pyplot.plot([ts[0],ts[-1]], [wmean+wsig,wmean+wsig],'r-.')
+            pyplot.plot([ts[0],ts[-1]], [wmean-wsig,wmean-wsig],'r-.')
             pyplot.xlabel('HJD-2450000.0')
-            pyplot.ylabel('Flux')
+            pyplot.ylabel('Residual flux')
             pyplot.title('Lightcurve of '+star.id)
-            plt_file = path.join(self.output_dir, 'lightcurve_'+str(j)+'.png')
+            if suffix != None:
+                plt_file = path.join(self.output_dir, 'lightcurve_'+suffix+'_'+str(j)+'.png')
+            else:
+                plt_file = path.join(self.output_dir, 'lightcurve_'+str(j)+'.png')
             pyplot.savefig(plt_file)
             pyplot.close(1)
     
+    def plot_ensemble_lightcurve(self):
+        """Method to plot the ensemble lightcurve"""
+        
+        fig = pyplot.figure(1)
+        ts = self.data_cube[0,:,0]
+        f = self.ensemble_flux
+        ferr = self.ensemble_fluxerr
+        idx = ~np.isnan(f)
+        pyplot.errorbar(ts[idx],f[idx],yerr=ferr[idx],fmt='k.', mfc='k', mec='k',ms=2, capsize=1)
+        pyplot.xlabel('HJD-2450000.0')
+        pyplot.ylabel('Residual flux')
+        pyplot.title('Ensemble lightcurve')
+        plt_file = path.join(self.output_dir, 'ensemble_lightcurve.png')
+        pyplot.savefig(plt_file)
+        pyplot.close(1)
+        
     def output_lightcurves(self,selected_stars):
+        
+        def flux_to_mag(flux):
+            mag = 2.5*np.log(flux)
+            return mag
+        
+        def calc_mag(flux,flux_err):
+            mag = flux_to_mag(flux)
+            df1 = flux - flux_err
+            m1 = flux_to_mag(df1)
+            df2 = flux + flux_err
+            m2 = flux_to_mag(df2)
+            mag_err = (m2-m1)/2.0
+            return mag, mag_err
         
         for star in selected_stars:
             j = self.get_star_idx(star)
             out_file = path.join(self.output_dir, 'lightcurve_'+str(j)+'.txt')
             fileobj = open(out_file,'w')
-            fileobj.write('# HJD-2450000.0    X[pix]   Y[pix]    Flux    Flux_err\n')
+            fileobj.write('# HJD-2450000.0    X[pix]   Y[pix]    Flux    Flux_err  Residual_flux Residual_flux_err  Residual_mag Residual_mag_err\n')
             frames = self.input_frames
             ts = self.data_cube[j,:,0]
             x = self.data_cube[j,:,1]
             y = self.data_cube[j,:,2]
             f = self.data_cube[j,:,5]
             ferr = self.data_cube[j,:,6]
+            rf = self.residuals_cube[j,:,0]
+            rferr = self.residuals_cube[j,:,1]
+            (mag,mag_err) = calc_mag(rf,rferr)
             idx = np.where(f > -99.0 )
             for i in idx[0]:
                 fileobj.write(path.basename(frames[i])+'  '+str(ts[i])+'  '+str(x[i])+'  '+\
-                str(y[i])+'  '+str(f[i])+'  '+str(ferr[i])+'\n')
+                str(y[i])+'  '+str(f[i])+'  '+str(ferr[i])+'  '+\
+                str(rf[i])+' '+str(rferr[i])+'  '+\
+                str(mag[i])+'  '+str(mag_err[i])+'\n')
             fileobj.close()
     
 class BanzaiTable():
@@ -192,7 +252,7 @@ class BanzaiTable():
         if len(hdu_list) == 3:
             self.data_file = path.basename(file_path)
             self.date_obs = hdu_list[0].header['DATE-OBS']
-            self.exptime = hdu_list[0].header['EXPTIME']
+            self.exptime = float(hdu_list[0].header['EXPTIME'])
             self.obs_lat = hdu_list[0].header['LATITUDE']
             self.obs_long = hdu_list[0].header['LONGITUD']
             self.obs_height = hdu_list[0].header['HEIGHT']

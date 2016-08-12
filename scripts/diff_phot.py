@@ -22,13 +22,13 @@ def run_diff_phot():
     phot_data.print_star_list()
     phot_data.load_data(params)
     
+    phot_data.diff_photometry()
+    
     phot_data.plot_lightcurves(phot_data.star_list)
     phot_data.output_lightcurves(phot_data.star_list)
     
-    phot_data.diff_photometry()
-
-# Output data products
-
+    phot_data.plot_ensemble_lightcurve()
+    
 def get_params():
     """Function to gather the required commandline arguments for different
     photometry"""
