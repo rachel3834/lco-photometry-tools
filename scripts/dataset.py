@@ -37,6 +37,7 @@ class DataSet():
         self.residuals_cube = np.zeros(1)
         self.ensemble_flux = np.zeros(1)
         self.ensemble_fluxerr = np.zeros(1)
+        self.qc = []
         self.nstars = 0
         self.nframes= 0
         self.star_list = []
@@ -143,7 +144,29 @@ class DataSet():
             weights = (1.0 / (sigmas*sigmas)) + ensemble_sigma_sq
             self.residuals_cube[j,:,1] = np.sqrt(1.0/weights)
             
-            
+    def quality_control(self):
+        """Method to identify suspect frames in the dataset from the scatter
+        in the photometry of the comparison stars"""
+        
+        stats = np.zeros([self.nstars,2])
+        idx = np.arange(0,self.nframes)
+        flags = []
+        for star in self.star_list[1:]:
+            j = self.get_star_idx(star)
+            f = self.residuals_cube[j,:,0]
+            ferr = self.residuals_cube[j,:,1]
+            kdx = ~np.isnan(f)
+            (wmean,sig) = statistics.calc_weighted_mean(f[kdx],ferr[kdx])
+            wsig = statistics.calc_weighted_sigma(f[kdx],ferr[kdx],wmean)
+            stats[j,0] = wmean
+            stats[j,1] = wsig
+            jdx = (np.where(abs(f[kdx]-wmean) > wsig))[0].tolist()
+            flags = flags + idx[kdx][jdx].tolist()
+                
+        for i in range(0,self.nframes):
+            if flags.count(i) == self.nstars-1:
+                self.qc.append(i)
+    
     def plot_lightcurves(self,selected_stars,suffix=None):
         """Method to plot lightcurve files of a selected range of stars
         from the star list.  Expects a list of Star objects"""
@@ -156,8 +179,7 @@ class DataSet():
             ferr = self.residuals_cube[j,:,1]
             idx = ~np.isnan(f)
             pyplot.errorbar(ts[idx],f[idx],yerr=ferr[idx],fmt='k.', mfc='k', mec='k',ms=2, capsize=1)
-            #pyplot.plot(ts[idx],f[idx],'k.',ms=2)
-            #print f[idx],ferr[idx]
+            pyplot.plot(ts[self.qc],f[self.qc],'rx',ms=4)
             (wmean,sig) = statistics.calc_weighted_mean(f[idx],ferr[idx])
             wsig = statistics.calc_weighted_sigma(f[idx],ferr[idx],wmean)
             pyplot.plot([ts[0],ts[-1]], [wmean,wmean],'r-')

@@ -24,6 +24,8 @@ def run_diff_phot():
     
     phot_data.diff_photometry()
     
+    phot_data.quality_control()
+    
     phot_data.plot_lightcurves(phot_data.star_list)
     phot_data.output_lightcurves(phot_data.star_list)
     
