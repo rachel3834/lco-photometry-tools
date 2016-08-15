@@ -178,23 +178,30 @@ class DataSet():
             f = self.residuals_cube[j,:,0]
             ferr = self.residuals_cube[j,:,1]
             idx = ~np.isnan(f)
-            pyplot.errorbar(ts[idx],f[idx],yerr=ferr[idx],fmt='k.', mfc='k', mec='k',ms=2, capsize=1)
-            pyplot.plot(ts[self.qc],f[self.qc],'rx',ms=4)
-            (wmean,sig) = statistics.calc_weighted_mean(f[idx],ferr[idx])
-            wsig = statistics.calc_weighted_sigma(f[idx],ferr[idx],wmean)
-            pyplot.plot([ts[0],ts[-1]], [wmean,wmean],'r-')
-            pyplot.plot([ts[0],ts[-1]], [wmean+wsig,wmean+wsig],'r-.')
-            pyplot.plot([ts[0],ts[-1]], [wmean-wsig,wmean-wsig],'r-.')
-            pyplot.xlabel('HJD-2450000.0')
-            pyplot.ylabel('Residual flux')
-            pyplot.title('Lightcurve of '+star.id)
-            if suffix != None:
-                plt_file = path.join(self.output_dir, 'lightcurve_'+suffix+'_'+str(j)+'.png')
+            if len(idx) > 0:
+                pyplot.errorbar(ts[idx],f[idx],yerr=ferr[idx],fmt='k.', \
+                                    mfc='k', mec='k',ms=2, capsize=1)
+                pyplot.plot(ts[self.qc],f[self.qc],'rx',ms=4)
+                (wmean,sig) = statistics.calc_weighted_mean(f[idx],ferr[idx])
+                wsig = statistics.calc_weighted_sigma(f[idx],ferr[idx],wmean)
+                pyplot.plot([ts[0],ts[-1]], [wmean,wmean],'r-')
+                pyplot.plot([ts[0],ts[-1]], [wmean+wsig,wmean+wsig],'r-.')
+                pyplot.plot([ts[0],ts[-1]], [wmean-wsig,wmean-wsig],'r-.')
+                pyplot.xlabel('HJD-2450000.0')
+                pyplot.ylabel('Residual flux')
+                pyplot.title('Lightcurve of '+star.id)
+                if suffix != None:
+                    plt_file = path.join(self.output_dir, 'lightcurve_'+\
+                                    suffix+'_'+str(j)+'.png')
+                else:
+                    plt_file = path.join(self.output_dir, 'lightcurve_'+str(j)+\
+                                    '.png')
+                pyplot.savefig(plt_file)
+                pyplot.close(1)
             else:
-                plt_file = path.join(self.output_dir, 'lightcurve_'+str(j)+'.png')
-            pyplot.savefig(plt_file)
-            pyplot.close(1)
-    
+                print('Warning: Insufficient valid data to plot lightcurve for ' + \
+                star.id)
+                
     def plot_ensemble_lightcurve(self):
         """Method to plot the ensemble lightcurve"""
         
