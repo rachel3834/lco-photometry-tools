@@ -272,29 +272,58 @@ class BanzaiTable():
         
         if file_path != None:
             self.read_banzai_table(file_path)
-    
+
+    def check_header(self,header):
+        """Method to verify that a Banzai table has the required header
+        parameters"""
+        
+        status = True
+        required_params = ['DATE-OBS', 'EXPTIME', 'LATITUDE', 'LONGITUD', 'HEIGHT']
+        for par in required_params:
+            if par not in header.keys():
+                status = False
+        return status
+
+    def check_table(self,table):
+        """Method to verify that a Banzai photometry table contains the 
+        required columns"""
+        
+        status = True
+        required_columns = ['X', 'Y', 'RA', 'DEC', 'FLUX', 'FLUXERR']
+        for col in required_columns:
+            if col not in table.dtype.fields:
+                status = False
+        return status
+        
     def read_banzai_table(self,file_path):
         """Method to read the photometry table from a single reduced BANZAI 
         FITS data product"""
         
         hdu_list = fits.open(file_path)
         if len(hdu_list) == 3:
-            self.data_file = path.basename(file_path)
-            self.date_obs = hdu_list[0].header['DATE-OBS']
-            self.exptime = float(hdu_list[0].header['EXPTIME'])
-            self.obs_lat = hdu_list[0].header['LATITUDE']
-            self.obs_long = hdu_list[0].header['LONGITUD']
-            self.obs_height = hdu_list[0].header['HEIGHT']
-            
             table = hdu_list[1].data
-            data = np.zeros([len(table),6])
-            self.x = table.field('X')
-            self.y = table.field('Y')
-            self.coord = SkyCoord(ra=(table.field('RA')*u.degree), \
-                                dec=(table.field('DEC')*u.degree))
-            self.flux = table.field('FLUX')
-            self.flux_err = table.field('FLUXERR')
-            self.got_data= True
+            header_ok = self.check_header(hdu_list[0].header)
+            table_ok = self.check_table(table)
+            
+            if header_ok == True and table_ok == True:
+                self.data_file = path.basename(file_path)
+                self.date_obs = hdu_list[0].header['DATE-OBS']
+                self.exptime = float(hdu_list[0].header['EXPTIME'])
+                self.obs_lat = hdu_list[0].header['LATITUDE']
+                self.obs_long = hdu_list[0].header['LONGITUD']
+                self.obs_height = hdu_list[0].header['HEIGHT']
+                
+                data = np.zeros([len(table),6])
+                self.x = table.field('X')
+                self.y = table.field('Y')
+                self.coord = SkyCoord(ra=(table.field('RA')*u.degree), \
+                                    dec=(table.field('DEC')*u.degree))
+                self.flux = table.field('FLUX')
+                self.flux_err = table.field('FLUXERR')
+                self.got_data= True
+            else:
+                print('ERROR: data table for '+path.basename(file_path)+' in incomplete')
+                self.got_data = False
         else:
             print('ERROR: '+path.basename(file_path)+' has too few FITS extensions')
             self.got_data = False
